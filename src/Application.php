@@ -38,6 +38,8 @@ use Authentication\Authenticator\JwtAuthenticator;
 use Authentication\Identifier\JwtSubjectIdentifier;
 use Cake\Routing\Router;
 
+use App\Middleware\CorsMiddleware;
+
 /**
  * Application setup class.
  *
@@ -116,7 +118,8 @@ class Application extends BaseApplication
             ]));
 
         $middlewareQueue->add(new AuthenticationMiddleware($authentication));
-
+        // CORSミドルウェアを追加
+        $middlewareQueue->add(new CorsMiddleware());
 
         return $middlewareQueue;
     }
