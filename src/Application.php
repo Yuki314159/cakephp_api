@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 /**
@@ -14,6 +15,7 @@ declare(strict_types=1);
  * @since     3.3.0
  * @license   https://opensource.org/licenses/mit-license.php MIT License
  */
+
 namespace App;
 
 use Cake\Core\Configure;
@@ -27,6 +29,14 @@ use Cake\Http\MiddlewareQueue;
 use Cake\ORM\Locator\TableLocator;
 use Cake\Routing\Middleware\AssetMiddleware;
 use Cake\Routing\Middleware\RoutingMiddleware;
+
+use Authentication\AuthenticationService;
+use Authentication\AuthenticationServiceInterface;
+use Authentication\Identifier\IdentifierInterface;
+use Authentication\Middleware\AuthenticationMiddleware;
+use Authentication\Authenticator\JwtAuthenticator;
+use Authentication\Identifier\JwtSubjectIdentifier;
+use Cake\Routing\Router;
 
 /**
  * Application setup class.
@@ -47,6 +57,7 @@ class Application extends BaseApplication
     {
         // Call parent to load bootstrap from files.
         parent::bootstrap();
+        $this->addPlugin('Authentication');
 
         if (PHP_SAPI !== 'cli') {
             FactoryLocator::add(
@@ -64,6 +75,19 @@ class Application extends BaseApplication
      */
     public function middleware(MiddlewareQueue $middlewareQueue): MiddlewareQueue
     {
+        $authentication = new AuthenticationService();
+
+        // JWT認証の設定
+        $authentication->loadAuthenticator('Authentication.Jwt', [
+            'secretKey' => Configure::read('Security.jwt_secret'),
+            'algorithm' => 'HS256',
+            'returnPayload' => false
+        ]);
+
+        $authentication->loadIdentifier('Authentication.JwtSubject', [
+            'resolver' => ['className' => 'Authentication.Orm', 'userModel' => 'Users'],
+        ]);
+
         $middlewareQueue
             // Catch any exceptions in the lower layers,
             // and make an error page/response
@@ -91,6 +115,9 @@ class Application extends BaseApplication
                 'httponly' => true,
             ]));
 
+        $middlewareQueue->add(new AuthenticationMiddleware($authentication));
+
+
         return $middlewareQueue;
     }
 
@@ -101,7 +128,5 @@ class Application extends BaseApplication
      * @return void
      * @link https://book.cakephp.org/5/en/development/dependency-injection.html#dependency-injection
      */
-    public function services(ContainerInterface $container): void
-    {
-    }
+    public function services(ContainerInterface $container): void {}
 }
