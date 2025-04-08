@@ -45,8 +45,7 @@ class UsersController extends AppController
     // ユーザーログイン
     public function login()
     {
-        Log::info(print_r($this->request->getData(), true));
-
+        //Log::info(print_r($this->request->getData(), true));
 
         if ($this->request->is('post')) {
             $result = $this->Authentication->getResult();
@@ -82,7 +81,7 @@ class UsersController extends AppController
     // ユーザー登録
     public function register()
     {
-        Log::info(print_r($this->request->getData(), true));
+        //Log::info(print_r($this->request->getData(), true));
 
         if ($this->request->is('post')) {
             $usersTable = TableRegistry::getTableLocator()->get('Users');
