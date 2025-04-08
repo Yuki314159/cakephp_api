@@ -35,6 +35,7 @@ use Authentication\AuthenticationServiceInterface;
 use Authentication\AuthenticationServiceProviderInterface;
 use Authentication\Middleware\AuthenticationMiddleware;
 use Psr\Http\Message\ServerRequestInterface;
+use Firebase\JWT\JWT;
 
 /**
  * Application setup class.
@@ -127,6 +128,24 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
                 'password' => 'password',
             ],
             'loginUrl' => '/users/login',
+        ]);
+
+        // 🔐 JWT認証を追加（API用）
+        $authenticationService->loadAuthenticator('Authentication.Jwt', [
+            'secretKey' => Configure::read('Security.jwt_secret'),
+            'algorithms' => ['HS256'],
+            'header' => 'authorization',
+            'tokenPrefix' => 'Bearer',
+        ]);
+
+        // JWT用の識別子（ユーザーIDで検索）
+        $authenticationService->loadIdentifier('Authentication.JwtSubject', [
+            'tokenField' => 'sub', // デフォルトは sub
+            'dataField' => 'id',   // データベース上のフィールド名
+            'resolver' => [
+                'className' => 'Authentication.Orm',
+                'userModel' => 'Users',
+            ],
         ]);
 
         return $authenticationService;

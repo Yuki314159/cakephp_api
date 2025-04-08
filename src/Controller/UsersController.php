@@ -20,7 +20,6 @@ class UsersController extends AppController
     public function beforeFilter(\Cake\Event\EventInterface $event)
     {
         parent::beforeFilter($event);
-        $this->Authentication->addUnauthenticatedActions(['login', 'register']);
     }
 
     public function initialize(): void
@@ -64,6 +63,7 @@ class UsersController extends AppController
             $key = Configure::read('Security.jwt_secret'); // JWT秘密鍵を取得
             $payload = [
                 'sub' => $user->get('id'),
+                'email' => $user->get('email'),
                 'exp' => time() + 3600, // 1時間後にトークン失効
             ];
 
@@ -108,5 +108,28 @@ class UsersController extends AppController
         return $this->response->withStatus(401)
             ->withType('application/json')
             ->withStringBody(json_encode(['error' => 'こちらの内容では登録できません。']));
+    }
+
+    public function callback()
+    {
+        $result = $this->Authentication->getResult();
+
+        if (!$result->isValid()) {
+            return $this->response->withStatus(401)
+                ->withType('application/json')
+                ->withStringBody(json_encode(['error' => 'トークンが無効か期限切れです']));
+        }
+
+        $user = $this->Authentication->getIdentity();
+        //Log::info(print_r($user, true));
+
+        return $this->response->withType('application/json')
+            ->withStringBody(json_encode([
+                'message' => '認証成功',
+                'user' => [
+                    'id' => $user->sub,
+                    'email' => $user->email
+                ]
+            ]));
     }
 }

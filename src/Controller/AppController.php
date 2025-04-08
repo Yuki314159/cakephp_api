@@ -53,4 +53,10 @@ class AppController extends Controller
         $this->loadComponent('Authentication.Authentication');
         $this->autoRender = false;
     }
+
+    public function beforeFilter(\Cake\Event\EventInterface $event)
+    {
+        parent::beforeFilter($event);
+        $this->Authentication->addUnauthenticatedActions(['login', 'register']);
+    }
 }
