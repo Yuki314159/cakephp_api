@@ -10,15 +10,22 @@ use Cake\ORM\TableRegistry;
 use Cake\Http\Exception\UnauthorizedException;
 use Cake\Core\Configure;
 
+use Cake\Log\Log;
+
 /**
  * Users Controller
  */
 class UsersController extends AppController
 {
+    public function beforeFilter(\Cake\Event\EventInterface $event)
+    {
+        parent::beforeFilter($event);
+        $this->Authentication->addUnauthenticatedActions(['login', 'register']);
+    }
+
     public function initialize(): void
     {
         parent::initialize();
-        $this->Authentication->allowUnauthenticated(['login', 'register']);
     }
 
     // ユーザー一覧
@@ -39,45 +46,67 @@ class UsersController extends AppController
     // ユーザーログイン
     public function login()
     {
-        $this->request->allowMethod(['post']);
-        $result = $this->Authentication->getResult();
+        Log::info(print_r($this->request->getData(), true));
 
-        if (!$result->isValid()) {
-            throw new UnauthorizedException('Invalid email or password');
+
+        if ($this->request->is('post')) {
+            $result = $this->Authentication->getResult();
+
+            if (!$result->isValid()) {
+                return $this->response->withStatus(400)
+                    ->withType('application/json')
+                    ->withStringBody(json_encode(['error' => 'メールアドレスもしくはパスワードが間違っています。']));
+            }
+
+            // ユーザー情報を取得
+            $user = $this->Authentication->getIdentity();
+
+            $key = Configure::read('Security.jwt_secret'); // JWT秘密鍵を取得
+            $payload = [
+                'sub' => $user->get('id'),
+                'exp' => time() + 3600, // 1時間後にトークン失効
+            ];
+
+            $token = JWT::encode($payload, $key, 'HS256');
+
+            return $this->response->withType('application/json')
+                ->withStringBody(json_encode(['token' => $token]));
         }
 
-        // ユーザー情報を取得
-        $user = $this->Authentication->getIdentity();
-
-        $key = Configure::read('Security.jwt_secret'); // JWT秘密鍵を取得
-        $payload = [
-            'sub' => $user->get('id'),
-            'exp' => time() + 3600, // 1時間後にトークン失効
-        ];
-
-        $token = JWT::encode($payload, $key, 'HS256');
-
-        return $this->response->withType('application/json')
-            ->withStringBody(json_encode(['token' => $token]));
+        // POST以外でアクセスされた場合のレスポンス（任意）
+        return $this->response->withStatus(401)
+            ->withType('application/json')
+            ->withStringBody(json_encode(['error' => '予期せぬエラーが発生しました。']));
     }
 
     // ユーザー登録
     public function register()
     {
-        $this->request->allowMethod(['post']);
-        $usersTable = TableRegistry::getTableLocator()->get('Users');
-        $user = $usersTable->newEntity($this->request->getData());
+        Log::info(print_r($this->request->getData(), true));
 
-        if ($usersTable->save($user)) {
-            return $this->response->withType('application/json')
-                ->withStringBody(json_encode(['message' => 'User registered successfully']));
+        if ($this->request->is('post')) {
+            $usersTable = TableRegistry::getTableLocator()->get('Users');
+            $user = $usersTable->newEntity($this->request->getData());
+
+            if ($usersTable->save($user)) {
+                return $this->response->withType('application/json')
+                    ->withStringBody(json_encode(['message' => '登録しました！']));
+            }
+
+            // 保存に失敗した場合のエラーをログに出力
+            Log::error('User registration failed. Errors: ' . print_r($user->getErrors(), true));
+
+            return $this->response->withStatus(400)
+                ->withType('application/json')
+                ->withStringBody(json_encode([
+                    'error' => '登録に失敗しました。',
+                    'details' => $user->getErrors(),
+                ]));
         }
 
-        return $this->response->withStatus(400)
+        // POST以外でアクセスされた場合のレスポンス（任意）
+        return $this->response->withStatus(401)
             ->withType('application/json')
-            ->withStringBody(json_encode([
-                'error' => 'User registration failed',
-                'details' => $user->getErrors(),
-            ]));
+            ->withStringBody(json_encode(['error' => 'こちらの内容では登録できません。']));
     }
 }

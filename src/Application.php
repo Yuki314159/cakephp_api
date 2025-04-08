@@ -32,13 +32,9 @@ use Cake\Routing\Middleware\RoutingMiddleware;
 
 use Authentication\AuthenticationService;
 use Authentication\AuthenticationServiceInterface;
-use Authentication\Identifier\IdentifierInterface;
+use Authentication\AuthenticationServiceProviderInterface;
 use Authentication\Middleware\AuthenticationMiddleware;
-use Authentication\Authenticator\JwtAuthenticator;
-use Authentication\Identifier\JwtSubjectIdentifier;
-use Cake\Routing\Router;
-
-use App\Middleware\CorsMiddleware;
+use Psr\Http\Message\ServerRequestInterface;
 
 /**
  * Application setup class.
@@ -48,7 +44,7 @@ use App\Middleware\CorsMiddleware;
  *
  * @extends \Cake\Http\BaseApplication<\App\Application>
  */
-class Application extends BaseApplication
+class Application extends BaseApplication implements AuthenticationServiceProviderInterface
 {
     /**
      * Load all the application configuration and bootstrap logic.
@@ -59,8 +55,6 @@ class Application extends BaseApplication
     {
         // Call parent to load bootstrap from files.
         parent::bootstrap();
-        $this->addPlugin('Authentication');
-
         if (PHP_SAPI !== 'cli') {
             FactoryLocator::add(
                 'Table',
@@ -77,49 +71,22 @@ class Application extends BaseApplication
      */
     public function middleware(MiddlewareQueue $middlewareQueue): MiddlewareQueue
     {
-        $authentication = new AuthenticationService();
-
-        // JWT認証の設定
-        $authentication->loadAuthenticator('Authentication.Jwt', [
-            'secretKey' => Configure::read('Security.jwt_secret'),
-            'algorithm' => 'HS256',
-            'returnPayload' => false
-        ]);
-
-        $authentication->loadIdentifier('Authentication.JwtSubject', [
-            'resolver' => ['className' => 'Authentication.Orm', 'userModel' => 'Users'],
-        ]);
+        $csrf = new CsrfProtectionMiddleware([]);
+        // CSRFスキップの条件を設定
+        $csrf->skipCheckCallback(function ($request) {
+            return true;
+        });
 
         $middlewareQueue
-            // Catch any exceptions in the lower layers,
-            // and make an error page/response
             ->add(new ErrorHandlerMiddleware(Configure::read('Error'), $this))
-
-            // Handle plugin/theme assets like CakePHP normally does.
             ->add(new AssetMiddleware([
                 'cacheTime' => Configure::read('Asset.cacheTime'),
             ]))
-
-            // Add routing middleware.
-            // If you have a large number of routes connected, turning on routes
-            // caching in production could improve performance.
-            // See https://github.com/CakeDC/cakephp-cached-routing
             ->add(new RoutingMiddleware($this))
-
-            // Parse various types of encoded request bodies so that they are
-            // available as array through $request->getData()
-            // https://book.cakephp.org/5/en/controllers/middleware.html#body-parser-middleware
             ->add(new BodyParserMiddleware())
+            ->add($csrf);
 
-            // Cross Site Request Forgery (CSRF) Protection Middleware
-            // https://book.cakephp.org/5/en/security/csrf.html#cross-site-request-forgery-csrf-middleware
-            ->add(new CsrfProtectionMiddleware([
-                'httponly' => true,
-            ]));
-
-        $middlewareQueue->add(new AuthenticationMiddleware($authentication));
-        // CORSミドルウェアを追加
-        $middlewareQueue->add(new CorsMiddleware());
+        $middlewareQueue->add(new AuthenticationMiddleware($this));
 
         return $middlewareQueue;
     }
@@ -132,4 +99,36 @@ class Application extends BaseApplication
      * @link https://book.cakephp.org/5/en/development/dependency-injection.html#dependency-injection
      */
     public function services(ContainerInterface $container): void {}
+
+    /**
+     * Get the authentication service for the application.
+     */
+    public function getAuthenticationService(ServerRequestInterface $request): AuthenticationServiceInterface
+    {
+        $authenticationService = new AuthenticationService([
+            'unauthenticatedRedirect' => '/users/login',
+            'queryParam' => 'redirect',
+        ]);
+
+        // 識別子をロードして、電子メールとパスワードのフィールドを確認します
+        $authenticationService->loadIdentifier('Authentication.Password', [
+            'fields' => [
+                'username' => 'email',
+                'password' => 'password',
+            ]
+        ]);
+
+        // 認証子をロードするには、最初にセッションを実行する必要があります
+        $authenticationService->loadAuthenticator('Authentication.Session');
+        // メールとパスワードを選択するためのフォームデータチェックの設定
+        $authenticationService->loadAuthenticator('Authentication.Form', [
+            'fields' => [
+                'username' => 'email',
+                'password' => 'password',
+            ],
+            'loginUrl' => '/users/login',
+        ]);
+
+        return $authenticationService;
+    }
 }

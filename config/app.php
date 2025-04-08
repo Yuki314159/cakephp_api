@@ -441,4 +441,10 @@ return [
         'safeTld' => env('DEBUG_KIT_SAFE_TLD', null),
         'ignoreAuthorization' => env('DEBUG_KIT_IGNORE_AUTHORIZATION', false),
     ],
+    'Authentication' => [
+        'default' => [
+            'authenticator' => 'Authentication.Form',
+            'loginUrl' => '/users/login',
+        ],
+    ],
 ];
